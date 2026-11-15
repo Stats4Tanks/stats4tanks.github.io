@@ -1118,6 +1118,54 @@ async function handleSyncStatus(env) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// TankTrouble admission token for the ping test.
+// Game servers only accept sockets whose ?t= carries a token minted by
+// tanktrouble.com and injected into their own HTML, which sends no CORS
+// headers, so the browser cannot read it directly. This proxies that string.
+// ---------------------------------------------------------------------------
+const TT_TOKEN_RE = /g_admissionToken\s*=\s*"([^"]+)"/;
+const TT_TOKEN_EXP_RE = /g_admissionTokenExpiresAt\s*=\s*(\d+)/;
+
+async function ttAdmissionToken(request) {
+  let html = "";
+  try {
+    const r = await fetch("https://tanktrouble.com/", {
+      headers: { "Accept": "text/html", "User-Agent": "Mozilla/5.0 (compatible; TierStats/1.0)" },
+      cf: { cacheTtl: 45, cacheEverything: true },
+    });
+    if (!r.ok) return verifyCors({ error: "TankTrouble responded " + r.status }, 502);
+    html = await r.text();
+  } catch (err) {
+    return verifyCors({ error: "Could not reach TankTrouble" }, 502);
+  }
+  const m = html.match(TT_TOKEN_RE);
+  if (!m) return verifyCors({ error: "No admission token in TankTrouble page" }, 502);
+  const exp = html.match(TT_TOKEN_EXP_RE);
+  return verifyCors({
+    token: m[1],
+    expiresAt: exp ? asInt(exp[1]) : 0,
+    country: (request.cf && request.cf.country) || "",
+    network: null,
+    floors: null,
+    nonce: "",
+  });
+}
+
+// The VPN/network verdict is not implemented; say so instead of guessing.
+function ttAdmissionCheck(request) {
+  return verifyCors({
+    ok: true,
+    verdict: "unchecked",
+    allowEntry: false,
+    review: false,
+    reason: "Network check unavailable",
+    country: (request.cf && request.cf.country) || "",
+    network: null,
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1147,6 +1195,15 @@ export default {
     }
     if (url.pathname === "/availability/verify/claim" && request.method === "POST") {
       return handleVerifyClaim(env, request);
+    }
+    if (url.pathname.indexOf("/tt-admission") === 0 && request.method === "OPTIONS") {
+      return verifyPreflight();
+    }
+    if (path === "/tt-admission" && request.method === "GET") {
+      return ttAdmissionToken(request);
+    }
+    if (path === "/tt-admission/check" && request.method === "POST") {
+      return ttAdmissionCheck(request);
     }
     if (path === "/sync" && request.method === "POST") {
       let body = {};
