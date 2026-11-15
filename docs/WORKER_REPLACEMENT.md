@@ -17,7 +17,7 @@ script (`Kode.gs`) and the site (`app.js` footer/admin) expect.
   (Matches, Aliases, Seeds, Settings, Inactive) into `data.js`. It does
   NOT re-run the Glicko engine, so ratings are byte-identical to the Sheet.
 - Scope is the publish pipeline only. The old Worker's interactive
-  backends (tournaments/challenges, player profiles/pings, tt-admission,
+  backends (player profiles/pings, tt-admission,
   availability, publish/verify admin) are NOT rebuilt here — those site
   features stay offline until a later backend phase.
 
