@@ -1527,12 +1527,21 @@ async function handleAvInterest(env, request) {
   if (!rec) return verifyCors({ ok: false, error: "that post is gone" }, 404);
   const who = String((b && b.name) || "").trim();
   if (!who) return verifyCors({ ok: false, error: "name required" }, 400);
-  const key = who.toLowerCase();
+  const roster = await avRoster(env);
+  if (!roster) return verifyCors({ ok: false, error: "leaderboard is not reachable" }, 503);
+  const canon = roster.find((n) => String(n).toLowerCase() === who.toLowerCase());
+  if (!canon) return verifyCors({ ok: false, error: "not on the leaderboard" }, 400);
+  const claimed = await avClaimOk(kv, canon, b && b.claim);
+  if (b && b.claim && !claimed) return verifyCors({ ok: false, error: "claim expired" }, 403);
+  const registered = await kv.get(AV_VERIFIED_PREFIX + String(canon).toLowerCase(), "json");
+  if (registered && !claimed) return verifyCors({ ok: false, error: "verified-owner" }, 403);
+  const key = String(canon).toLowerCase();
+  if (Number(rec.end) <= Date.now()) return verifyCors({ ok: false, error: "that post is gone" }, 404);
   const list = (Array.isArray(rec.interest) ? rec.interest : []).filter((n) => String(n).toLowerCase() !== key);
-  if (b.on) list.push(who);
+  if (b.on) list.push(canon);
   rec.interest = list.slice(0, 200);
   await kv.put(AV_SLOT_PREFIX + rec.id, JSON.stringify(rec), { expirationTtl: AV_SLOT_TTL_S });
-  return verifyCors({ ok: true, slot: avPublic(rec) });
+  return verifyCors({ ok: true, interest: rec.interest, slot: avPublic(rec) });
 }
 
 export default {
