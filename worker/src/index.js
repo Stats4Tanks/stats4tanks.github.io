@@ -1079,6 +1079,7 @@ async function handleVerifyClaim(env, request) {
     return verifyCors({ ok: false, error: "that code is not right" });
   }
   try { await kv.put("vcode:" + token, JSON.stringify(v), { expirationTtl: CLAIM_TTL_S }); } catch (e) { /* ttl refresh is best effort */ }
+  try { await kv.put("av:vowner:" + name.toLowerCase(), JSON.stringify({ at: Date.now() })); } catch (e) { /* optional registry */ }
   return verifyCors({ ok: true, player: v.player });
 }
 
@@ -1250,6 +1251,7 @@ async function handleProfilePing(env, request) {
     flagHidden: !!(body && body.flagHidden !== undefined ? body.flagHidden : auth.record && auth.record.flagHidden),
   };
   await auth.kv.put(PING_KEY_PREFIX + auth.player.toLowerCase(), JSON.stringify(record));
+  try { await auth.kv.put("av:vowner:" + auth.player.toLowerCase(), JSON.stringify({ at: Date.now() })); } catch (e) { /* optional registry */ }
   return verifyCors({ ok: true, record });
 }
 
@@ -1289,6 +1291,250 @@ async function handleProfileReset(env, request) {
   return verifyCors({ ok: true });
 }
 
+
+// ---------------------------------------------------------------------------
+// Availability board ("post a 1v1"). KV-backed slots, one live post per
+// player, with a per-post secret for edit/delete and claim-based protection
+// of verified names.
+//   GET  /availability            -> {ok, now, slots, owners}
+//   POST /availability            -> create: {ok, slot, secret}
+//   POST /availability/update     -> {id, secret, start, end}
+//   POST /availability/delete     -> {id, secret, claim, start}
+//   POST /availability/interest   -> {id, name, claim, on}
+// ---------------------------------------------------------------------------
+const AV_SLOT_PREFIX = "av:id:";
+const AV_OWNER_PREFIX = "av:owner:";
+const AV_VERIFIED_PREFIX = "av:vowner:";
+const AV_ROSTER_KEY = "av:roster";
+const AV_NOW_MS = 30 * 60 * 1000;
+const AV_MAX_SPAN_MS = 6 * 3600 * 1000;
+const AV_MAX_AHEAD_MS = 7 * 24 * 3600 * 1000;
+const AV_GRACE_MS = 5 * 60 * 1000;
+const AV_ROSTER_TTL_MS = 5 * 60 * 1000;
+const AV_SLOT_TTL_S = 7 * 24 * 3600;
+const AV_MAX_POSTS_PER_HOUR = 12;
+
+function avHex(bytes) {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  let h = "";
+  for (let i = 0; i < b.length; i++) h += b[i].toString(16).padStart(2, "0");
+  return h;
+}
+
+function avPublic(slot) {
+  return {
+    id: slot.id,
+    player: slot.player,
+    main: slot.main,
+    type: slot.type,
+    servers: slot.servers || [],
+    zone: slot.zone || "",
+    start: slot.start,
+    end: slot.end,
+    verified: !!slot.verified,
+    interest: Array.isArray(slot.interest) ? slot.interest : [],
+  };
+}
+
+async function avClaimOk(kv, name, claim) {
+  if (!kv) return false;
+  const code = String(claim || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!code) return false;
+  const v = await kv.get("vcode:" + code, "json");
+  if (!v || !v.player) return false;
+  return String(v.player).toLowerCase() === String(name).toLowerCase();
+}
+
+async function avRoster(env) {
+  const kv = verifyKv(env);
+  if (kv) {
+    try {
+      const cached = await kv.get(AV_ROSTER_KEY, "json");
+      if (cached && Array.isArray(cached.names) && cached.names.length && cached.at > Date.now() - AV_ROSTER_TTL_MS) {
+        return cached.names;
+      }
+    } catch (e) { /* fall through to the published leaderboard */ }
+  }
+  let file = null;
+  try { file = await ghGetFile(env); } catch (e) { file = null; }
+  if (!file) return null;
+  const lb = splitLbFile(file.body).data || {};
+  const seen = new Map();
+  for (const p of lb.players || []) {
+    if (p && p.name) seen.set(String(p.name).toLowerCase(), String(p.name));
+  }
+  const alts = (lb.cards && lb.cards.alts) || {};
+  for (const [base, list] of Object.entries(alts)) {
+    const canon = seen.get(String(base).toLowerCase());
+    if (!canon) continue;
+    for (const alt of Array.isArray(list) ? list : []) {
+      if (alt) seen.set(String(alt).toLowerCase(), canon);
+    }
+  }
+  const names = [...seen.values()];
+  if (kv && names.length) {
+    try { await kv.put(AV_ROSTER_KEY, JSON.stringify({ at: Date.now(), names }), { expirationTtl: 3600 }); } catch (e) { /* cache only */ }
+  }
+  return names;
+}
+
+async function avRateOk(kv, request) {
+  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "local";
+  const key = "av:rl:" + String(ip).split(",")[0].trim();
+  const now = Date.now();
+  const cur = (await kv.get(key, "json")) || { n: 0, at: now };
+  if (cur.at < now - 3600 * 1000) { cur.n = 0; cur.at = now; }
+  if (cur.n >= AV_MAX_POSTS_PER_HOUR) return false;
+  cur.n += 1;
+  try { await kv.put(key, JSON.stringify(cur), { expirationTtl: 3600 }); } catch (e) { /* best effort */ }
+  return true;
+}
+
+async function avSlot(kv, id) {
+  if (!id) return null;
+  try { return await kv.get(AV_SLOT_PREFIX + String(id), "json"); } catch (e) { return null; }
+}
+
+async function handleAvBoard(env) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "availability backend not configured" }, 503);
+  const now = Date.now();
+  const slots = [];
+  let cursor;
+  do {
+    const page = await kv.list({ prefix: AV_SLOT_PREFIX, cursor });
+    for (const key of page.keys) {
+      const rec = await kv.get(key.name, "json");
+      if (rec && rec.id && rec.player && Number(rec.end) > now - AV_GRACE_MS) slots.push(avPublic(rec));
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  slots.sort((a, b) => a.start - b.start || String(a.player).localeCompare(String(b.player)));
+  const owners = [...new Set(slots.filter((s) => s.verified).map((s) => s.player))];
+  return verifyCors({ ok: true, now, slots, owners });
+}
+
+async function handleAvCreate(env, request) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "availability backend not configured" }, 503);
+  let b = {};
+  try { b = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const type = b && b.type === "later" ? "later" : "now";
+  const asked = cleanName(b && b.name);
+  if (!asked) return verifyCors({ ok: false, error: "name required" }, 400);
+  const roster = await avRoster(env);
+  if (!roster) return verifyCors({ ok: false, error: "leaderboard is not reachable" }, 503);
+  const canon = roster.find((n) => String(n).toLowerCase() === asked.toLowerCase());
+  if (!canon) return verifyCors({ ok: false, error: "not on the leaderboard" }, 400);
+  const key = canon.toLowerCase();
+  const now = Date.now();
+  const existing = await kv.get(AV_OWNER_PREFIX + key, "json");
+  if (existing && Number(existing.end) > now) {
+    return verifyCors({ ok: false, error: existing.type === "later" ? "scheduled availability" : "right-now availability" }, 409);
+  }
+  const claimed = await avClaimOk(kv, canon, b && b.claim);
+  const registered = await kv.get(AV_VERIFIED_PREFIX + key, "json");
+  if (registered && !claimed) return verifyCors({ ok: false, error: "verified-owner" }, 403);
+  const servers = (Array.isArray(b && b.servers) ? b.servers : [])
+    .filter((v) => SERVERS.indexOf(String(v)) >= 0)
+    .filter((v, i, all) => all.indexOf(v) === i)
+    .slice(0, SERVERS.length);
+  if (!servers.length) return verifyCors({ ok: false, error: "pick at least one server" }, 400);
+  let start;
+  let end;
+  if (type === "now") {
+    start = now;
+    end = now + AV_NOW_MS;
+  } else {
+    start = Number(b && b.start);
+    end = Number(b && b.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return verifyCors({ ok: false, error: "pick a start and end time" }, 400);
+    if (start < now - AV_GRACE_MS) return verifyCors({ ok: false, error: "start time is already in the past" }, 400);
+    if (start > now + AV_MAX_AHEAD_MS) return verifyCors({ ok: false, error: "start time is too far ahead" }, 400);
+    if (end <= start) return verifyCors({ ok: false, error: "end time must be after the start" }, 400);
+    if (end - start > AV_MAX_SPAN_MS) return verifyCors({ ok: false, error: "that window is too long" }, 400);
+  }
+  if (!(await avRateOk(kv, request))) return verifyCors({ ok: false, error: "too many posts" }, 429);
+  const slot = {
+    id: "av_" + avHex(6),
+    player: canon,
+    main: servers[0],
+    type,
+    servers,
+    zone: String((b && b.zone) || "").slice(0, 64),
+    start,
+    end,
+    verified: !!claimed,
+    interest: [],
+    createdAt: now,
+    secret: avHex(16),
+  };
+  try {
+    await kv.put(AV_SLOT_PREFIX + slot.id, JSON.stringify(slot), { expirationTtl: AV_SLOT_TTL_S });
+    await kv.put(AV_OWNER_PREFIX + key, JSON.stringify({ id: slot.id, end, type }), { expirationTtl: AV_SLOT_TTL_S });
+    if (claimed) await kv.put(AV_VERIFIED_PREFIX + key, JSON.stringify({ at: now }));
+  } catch (e) {
+    return verifyCors({ ok: false, error: "could not save that post" }, 500);
+  }
+  return verifyCors({ ok: true, slot: avPublic(slot), secret: slot.secret });
+}
+
+async function handleAvUpdate(env, request) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "availability backend not configured" }, 503);
+  let b = {};
+  try { b = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const rec = await avSlot(kv, b && b.id);
+  if (!rec) return verifyCors({ ok: false, error: "that post is gone" }, 404);
+  if (!b.secret || b.secret !== rec.secret) return verifyCors({ ok: false, error: "that post is not yours" }, 403);
+  const start = Number(b.start) || rec.start;
+  const end = Number(b.end);
+  if (!Number.isFinite(end) || end <= start) return verifyCors({ ok: false, error: "end time must be after the start" }, 400);
+  if (end - start > AV_MAX_SPAN_MS) return verifyCors({ ok: false, error: "that window is too long" }, 400);
+  if (end < Date.now()) return verifyCors({ ok: false, error: "that window has already ended" }, 400);
+  rec.start = start;
+  rec.end = end;
+  await kv.put(AV_SLOT_PREFIX + rec.id, JSON.stringify(rec), { expirationTtl: AV_SLOT_TTL_S });
+  const key = String(rec.player).toLowerCase();
+  await kv.put(AV_OWNER_PREFIX + key, JSON.stringify({ id: rec.id, end, type: rec.type }), { expirationTtl: AV_SLOT_TTL_S });
+  return verifyCors({ ok: true, slot: avPublic(rec) });
+}
+
+async function handleAvDelete(env, request) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "availability backend not configured" }, 503);
+  let b = {};
+  try { b = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const rec = await avSlot(kv, b && b.id);
+  if (!rec) return verifyCors({ ok: true });
+  const secretOk = !!b.secret && b.secret === rec.secret;
+  const claimOk = await avClaimOk(kv, rec.player, b && b.claim);
+  if (!secretOk && !claimOk) return verifyCors({ ok: false, error: "that post is not yours" }, 403);
+  await kv.delete(AV_SLOT_PREFIX + rec.id);
+  const key = String(rec.player).toLowerCase();
+  const owner = await kv.get(AV_OWNER_PREFIX + key, "json");
+  if (owner && owner.id === rec.id) await kv.delete(AV_OWNER_PREFIX + key);
+  return verifyCors({ ok: true });
+}
+
+async function handleAvInterest(env, request) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "availability backend not configured" }, 503);
+  let b = {};
+  try { b = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const rec = await avSlot(kv, b && b.id);
+  if (!rec) return verifyCors({ ok: false, error: "that post is gone" }, 404);
+  const who = String((b && b.name) || "").trim();
+  if (!who) return verifyCors({ ok: false, error: "name required" }, 400);
+  const key = who.toLowerCase();
+  const list = (Array.isArray(rec.interest) ? rec.interest : []).filter((n) => String(n).toLowerCase() !== key);
+  if (b.on) list.push(who);
+  rec.interest = list.slice(0, 200);
+  await kv.put(AV_SLOT_PREFIX + rec.id, JSON.stringify(rec), { expirationTtl: AV_SLOT_TTL_S });
+  return verifyCors({ ok: true, slot: avPublic(rec) });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1300,6 +1546,27 @@ export default {
     }
     if (path === "/sync-status" && request.method === "GET") {
       return handleSyncStatus(env);
+    }
+    if (url.pathname === "/availability" && request.method === "OPTIONS") {
+      return verifyPreflight();
+    }
+    if (url.pathname === "/availability" && request.method === "GET") {
+      return handleAvBoard(env);
+    }
+    if (url.pathname === "/availability" && request.method === "POST") {
+      return handleAvCreate(env, request);
+    }
+    if (request.method === "OPTIONS" && ["/availability/update", "/availability/delete", "/availability/interest"].indexOf(url.pathname) >= 0) {
+      return verifyPreflight();
+    }
+    if (url.pathname === "/availability/update" && request.method === "POST") {
+      return handleAvUpdate(env, request);
+    }
+    if (url.pathname === "/availability/delete" && request.method === "POST") {
+      return handleAvDelete(env, request);
+    }
+    if (url.pathname === "/availability/interest" && request.method === "POST") {
+      return handleAvInterest(env, request);
     }
     if (url.pathname === "/availability/tank" && request.method === "OPTIONS") {
       return verifyPreflight();
