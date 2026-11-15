@@ -19,9 +19,9 @@
  *   GITHUB_REPO     Stats4Tanks/stats4tanks.github.io
  *   GITHUB_BRANCH   main
  *   GITHUB_TOKEN    fine-grained PAT (contents: read+write on that repo only)
- *   WORKER_SYNC_URL https://tierstats-publish.tierstats.workers.dev/sync
- *   WORKER_SECRET   admin/worker shared secret (same password as #/admin)
- *   SYNC_STATUS_URL https://tierstats-publish.tierstats.workers.dev/sync-status
+ *   WORKER_SYNC_URL https://tierstats-publish.alternator756.workers.dev/sync
+ *   WORKER_SECRET   shared secret between the Sheet and the Worker
+ *   SYNC_STATUS_URL https://tierstats-publish.alternator756.workers.dev/sync-status
  *
  * Sheet tabs (from TankTrouble_Dynamic_Glicko.xlsx): Read Me, Settings,
  * Aliases, Seeds, Matches, Leaderboard, All Players, Provisional, Inactive,
@@ -32,8 +32,8 @@
 var CONFIG_DEFAULTS = {
   GITHUB_REPO: 'Stats4Tanks/stats4tanks.github.io',
   GITHUB_BRANCH: 'main',
-  WORKER_SYNC_URL: 'https://tierstats-publish.tierstats.workers.dev/sync',
-  SYNC_STATUS_URL: 'https://tierstats-publish.tierstats.workers.dev/sync-status',
+  WORKER_SYNC_URL: 'https://tierstats-publish.alternator756.workers.dev/sync',
+  SYNC_STATUS_URL: 'https://tierstats-publish.alternator756.workers.dev/sync-status',
   SHEET_MATCHES: 'Matches',       // a, b, sa, sb, date (+ optional sv)
   SHEET_ALIASES: 'Aliases',       // wrongName, correctName, [note]
   SHEET_SEEDS: 'Seeds',           // player, old(0-100), [glicko], [rd]

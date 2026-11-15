@@ -77,7 +77,7 @@ brand-tank, paint cans, icons, flags `gb/in/nl/ru`), `tankart/manifest.json`
    The live OG default (`share/_default.png`) and per-player share images were
    not recovered either.
 4. **Backend code & secrets**: the `tierstats-publish` Worker source, the
-   original Apps Script project, the GitHub token and the admin password were
+   original Apps Script project, the GitHub token and the Worker secret were
    intentionally never in the recovery package. The Worker must be re-pointed
    at `Stats4Tanks/stats4tanks.github.io`; see `apps-script/SETUP.md`.
 

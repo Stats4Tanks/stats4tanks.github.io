@@ -3,7 +3,7 @@
 The old `tierstats-publish` Worker is gone (every route 404s, source was
 never in any repo, and it is not in our Cloudflare account). This is a
 clean-room replacement that implements exactly the contract the Sheet
-script (`Kode.gs`) and the site (`app.js` footer/admin) expect.
+script (`Kode.gs`) and the site (`app.js` footer) expect.
 
 ## What it does (and does NOT do)
 
@@ -16,10 +16,9 @@ script (`Kode.gs`) and the site (`app.js` footer/admin) expect.
   computed tabs (Leaderboard, All Players, …) and raw tabs
   (Matches, Aliases, Seeds, Settings, Inactive) into `data.js`. It does
   NOT re-run the Glicko engine, so ratings are byte-identical to the Sheet.
-- Scope is the publish pipeline only. The old Worker's interactive
-  backends (player profiles/pings, tt-admission,
-  availability, publish/verify admin) are NOT rebuilt here — those site
-  features stay offline until a later backend phase.
+- Scope is the publish pipeline only. The site's interactive backends
+  (availability, player profiles/pings, tt-admission) live in the current
+  Worker source under `worker/`; they are not described here.
 
 ## data.js mapping (verified against the 2026-11-09 snapshot)
 

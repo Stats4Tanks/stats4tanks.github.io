@@ -41,9 +41,9 @@ Project Settings (gear) → Script Properties → add:
 | `GITHUB_REPO` | `Stats4Tanks/stats4tanks.github.io` |
 | `GITHUB_BRANCH` | `main` |
 | `GITHUB_TOKEN` | the PAT from step 1 |
-| `WORKER_SYNC_URL` | `https://tierstats-publish.tierstats.workers.dev/sync` |
-| `WORKER_SECRET` | same secret as the `#/admin` password |
-| `SYNC_STATUS_URL` | `https://tierstats-publish.tierstats.workers.dev/sync-status` |
+| `WORKER_SYNC_URL` | `https://tierstats-publish.alternator756.workers.dev/sync` |
+| `WORKER_SECRET` | shared secret with the Worker |
+| `SYNC_STATUS_URL` | `https://tierstats-publish.alternator756.workers.dev/sync-status` |
 
 Run **Stats4Tanks → Setup check** in the Sheet to verify.
 
@@ -59,9 +59,8 @@ poke per 2 minutes; the Worker's 5-min cron covers the rest).
 In the Cloudflare Worker (`tierstats-publish`) configuration, set the repo to
 `Stats4Tanks/stats4tanks.github.io` (env var / wrangler config + the GitHub
 credentials it uses — a repo-scoped token or GitHub App installation on the
-new repo). Verify with the site's admin console: **Sync from sheet now**,
-then check `#/admin` sync-health (`/sync-status`: last publish age, match and
-player counts).
+new repo). Verify with `GET https://tierstats-publish.alternator756.workers.dev/sync-status` (last publish age, match and
+player counts) or with **Stats4Tanks → Check sync status** in the Sheet.
 
 ## 6. Test end to end
 

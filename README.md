@@ -29,7 +29,6 @@ re-added from the older snapshot. See [docs/RECOVERY-INVENTORY.md](docs/RECOVERY
 - **Method** — `#/method` how the rating system works
 - **Rules** — `#/rules`, **FAQ** — `#/faq`
 - **Player** — `#/player/<name>` profiles, rating-history graphs, rank movement
-- **Admin** — `#/admin` owners-only match log (password protected)
 
 Direct path URLs (`/analytics/`, `/cards/`, `/player/…`, …) work via the
 reconstructed route folders plus the `404.html` SPA fallback. See
@@ -37,9 +36,10 @@ reconstructed route folders plus the `404.html` SPA fallback. See
 
 ## How published matches work
 
-`log.js` is the shared match log. The admin console commits to it via the
-`tierstats-publish` Worker ("Publish to everyone"); every visitor's browser
-loads it fresh and recalculates all Glicko-2 ratings at page load.
+`log.js` is the shared match log and `data.js` the sheet snapshot. The
+`tierstats-publish` Worker is the only writer (the Google Sheet drives it);
+every visitor's browser loads both fresh and recalculates all Glicko-2
+ratings at page load.
 
 `data.js` is the sheet-generated snapshot (authoritative data: generated
 2026-11-09, 48 qualified / 116 total players / 504 matches / 144 tank

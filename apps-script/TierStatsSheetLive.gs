@@ -867,8 +867,8 @@ function round1_(n) {
 const TT_PUB = {
   GITHUB_REPO: 'Stats4Tanks/stats4tanks.github.io',
   GITHUB_BRANCH: 'main',
-  WORKER_SYNC_URL: 'https://tierstats-publish.tierstats.workers.dev/sync',
-  SYNC_STATUS_URL: 'https://tierstats-publish.tierstats.workers.dev/sync-status',
+  WORKER_SYNC_URL: 'https://tierstats-publish.alternator756.workers.dev/sync',
+  SYNC_STATUS_URL: 'https://tierstats-publish.alternator756.workers.dev/sync-status',
   // Sheets whose edits can change website data (outputs + engine inputs).
   DATA_SHEETS: ['Settings', 'Aliases', 'Seeds', 'Matches', 'Inactive'],
   // At most one website poke per 2 minutes; the Worker cron covers the rest.
