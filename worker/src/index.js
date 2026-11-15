@@ -1078,6 +1078,7 @@ async function handleVerifyClaim(env, request) {
   if (!v || !v.player || String(v.player).toLowerCase() !== name.toLowerCase()) {
     return verifyCors({ ok: false, error: "that code is not right" });
   }
+  try { await kv.put("vcode:" + token, JSON.stringify(v), { expirationTtl: CLAIM_TTL_S }); } catch (e) { /* ttl refresh is best effort */ }
   return verifyCors({ ok: true, player: v.player });
 }
 
@@ -1161,9 +1162,131 @@ function ttAdmissionCheck(request) {
     allowEntry: false,
     review: false,
     reason: "Network check unavailable",
+    token: newMeasureToken(),
     country: (request.cf && request.cf.country) || "",
     network: null,
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Profile ping store (/profiles/*).
+// Deliberately independent of tournament network validation: a verified
+// player can measure and publish their server latency without the unfinished
+// VPN / impossible-RTT check. Auth is the verification code they claimed
+// their name with (stored as vcode:<CODE> in VERIFY_KV).
+// ---------------------------------------------------------------------------
+const PING_KEY_PREFIX = "ping:";
+const PING_TOKEN_RE = /^m\.[a-f0-9]{32}\.\d{10,}$/;
+const PING_TOKEN_TTL_MS = 30 * 60 * 1000;
+const PING_VALUE_RE = /^\d{1,4}(?:-\d{1,4})?$/;
+// A claimed code doubles as the long-lived profile credential in the browser,
+// so every successful use refreshes its KV lifetime.
+const CLAIM_TTL_S = 400 * 24 * 3600;
+
+function newMeasureToken() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  let h = "";
+  for (let i = 0; i < b.length; i++) h += b[i].toString(16).padStart(2, "0");
+  return "m." + h + "." + Date.now();
+}
+
+function measureTokenOk(tok) {
+  const t = String(tok || "");
+  if (!PING_TOKEN_RE.test(t)) return false;
+  const ts = Number(t.split(".")[2]);
+  if (!Number.isFinite(ts)) return false;
+  const age = Date.now() - ts;
+  return age >= 0 && age <= PING_TOKEN_TTL_MS;
+}
+
+async function profileAuth(env, name, claim) {
+  const kv = verifyKv(env);
+  if (!kv) return { error: verifyCors({ ok: false, error: "profile backend not configured" }, 503) };
+  const player = cleanName(name);
+  const code = String(claim || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!player) return { error: verifyCors({ ok: false, error: "name required" }, 400) };
+  if (!code) return { error: verifyCors({ ok: false, error: "claim required" }, 403) };
+  const v = await kv.get("vcode:" + code, "json");
+  if (!v || !v.player || String(v.player).toLowerCase() !== player.toLowerCase()) {
+    return { error: verifyCors({ ok: false, error: "claim expired" }, 403) };
+  }
+  try { await kv.put("vcode:" + code, JSON.stringify(v), { expirationTtl: CLAIM_TTL_S }); } catch (e) { /* ttl refresh is best effort */ }
+  return {
+    kv,
+    player,
+    record: await kv.get(PING_KEY_PREFIX + player.toLowerCase(), "json"),
+  };
+}
+
+function cleanPingMap(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const server of SERVERS) {
+    const value = String(raw[server] === undefined || raw[server] === null ? "" : raw[server]).trim();
+    if (PING_VALUE_RE.test(value)) out[server] = value;
+  }
+  return out;
+}
+
+async function handleProfilePing(env, request) {
+  let body = {};
+  try { body = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const auth = await profileAuth(env, body && body.name, body && body.claim);
+  if (auth.error) return auth.error;
+  if (!measureTokenOk(body && body.token)) {
+    return verifyCors({ ok: false, error: "measurement expired - measure again" }, 403);
+  }
+  const pings = cleanPingMap(body && body.pings);
+  const main = SERVERS.indexOf(String((body && body.main) || "")) >= 0 ? String(body.main) : "";
+  if (!main || !Object.keys(pings).length) return verifyCors({ ok: false, error: "no ping data" }, 400);
+  const record = {
+    name: auth.player,
+    main,
+    pings,
+    samples: body && body.samples && typeof body.samples === "object" ? body.samples : {},
+    at: Date.now(),
+    flagHidden: !!(body && body.flagHidden !== undefined ? body.flagHidden : auth.record && auth.record.flagHidden),
+  };
+  await auth.kv.put(PING_KEY_PREFIX + auth.player.toLowerCase(), JSON.stringify(record));
+  return verifyCors({ ok: true, record });
+}
+
+async function handleProfilePings(env) {
+  const kv = verifyKv(env);
+  if (!kv) return verifyCors({ ok: false, error: "profile backend not configured" }, 503);
+  const pings = {};
+  let cursor;
+  do {
+    const page = await kv.list({ prefix: PING_KEY_PREFIX, cursor });
+    for (const key of page.keys) {
+      const rec = await kv.get(key.name, "json");
+      if (rec && rec.name && rec.main && rec.pings) pings[rec.name] = rec;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return verifyCors({ ok: true, pings });
+}
+
+async function handleProfileFlag(env, request) {
+  let body = {};
+  try { body = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const auth = await profileAuth(env, body && body.name, body && body.claim);
+  if (auth.error) return auth.error;
+  if (!auth.record) return verifyCors({ ok: false, error: "no ping saved yet" }, 404);
+  auth.record.flagHidden = !!(body && body.hidden);
+  await auth.kv.put(PING_KEY_PREFIX + auth.player.toLowerCase(), JSON.stringify(auth.record));
+  return verifyCors({ ok: true, flagHidden: auth.record.flagHidden });
+}
+
+async function handleProfileReset(env, request) {
+  let body = {};
+  try { body = await request.json(); } catch (e) { /* empty/invalid body */ }
+  const auth = await profileAuth(env, body && body.name, body && body.claim);
+  if (auth.error) return auth.error;
+  await auth.kv.delete(PING_KEY_PREFIX + auth.player.toLowerCase());
+  return verifyCors({ ok: true });
 }
 
 export default {
@@ -1204,6 +1327,30 @@ export default {
     }
     if (path === "/tt-admission/check" && request.method === "POST") {
       return ttAdmissionCheck(request);
+    }
+    if (path === "/tt-admission/verify" && request.method === "POST") {
+      let body = {};
+      try { body = await request.json(); } catch (e) { /* empty/invalid body */ }
+      const tok = String((body && body.token) || "");
+      if (!measureTokenOk(tok)) {
+        return verifyCors({ ok: false, allow: false, error: "measurement expired - measure again" }, 403);
+      }
+      return verifyCors({ ok: true, allow: true, verdict: "unchecked", review: false, reason: "" });
+    }
+    if (url.pathname.indexOf("/profiles/") === 0 && request.method === "OPTIONS") {
+      return verifyPreflight();
+    }
+    if (path === "/profiles/pings" && request.method === "GET") {
+      return handleProfilePings(env);
+    }
+    if ((path === "/profiles/ping" || path === "/profiles/recover") && request.method === "POST") {
+      return handleProfilePing(env, request);
+    }
+    if (path === "/profiles/flag" && request.method === "POST") {
+      return handleProfileFlag(env, request);
+    }
+    if (path === "/profiles/reset" && request.method === "POST") {
+      return handleProfileReset(env, request);
     }
     if (path === "/sync" && request.method === "POST") {
       let body = {};
