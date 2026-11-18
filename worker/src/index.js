@@ -972,7 +972,11 @@ async function handleTank(env, url) {
   if (!r.ok) {
     return verifyCors({ ok: false, error: r.reason === "unknown" ? "no in-game tank found for this name" : "could not reach the game profile" });
   }
-  return verifyCors({ ok: true, player: r.username, tank: tankSubset(r.data) });
+  const tank = tankSubset(r.data);
+  // lastLogin is the one owner-approved extra field: the cards render a
+  // "last seen" line from it, and the baked data.js block never refreshes.
+  if (r.data && r.data.lastLogin != null) tank.lastLogin = String(r.data.lastLogin);
+  return verifyCors({ ok: true, player: r.username, tank });
 }
 
 async function handleVerifyStart(env, request) {

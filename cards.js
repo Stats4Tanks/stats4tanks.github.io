@@ -54,7 +54,7 @@
       <span class="pcb-kicker">${t("cards.statSheet")}</span>
       <span class="pcard-name-row"><a class="pcard-name pc-open" href="#/player/${encodeURIComponent(a)}" title="${t("cards.openProfile")}">${m(a)}</a><span class="vslot" data-vname="${m(a)}"></span>${kt(a)}</span>
       <span class="pcb-meta"><span>${A(s)}</span><b class="mono">#${r}</b></span>
-      ${f?`<span class="pcb-head-seen" title="${m(t("cards.lastSeen"))} \xB7 ${m(S)}">${se}${m(f)}</span>`:""}
+      ${f?`<span class="pcb-head-seen" data-seen-for="${m(a)}" title="${m(t("cards.lastSeen"))} \xB7 ${m(S)}">${se}<span class="pcb-seen-txt">${m(f)}</span></span>`:""}
     </div>
     <span class="pcb-head-side">
       <button type="button" class="pcb-flip" title="${m(t("cards.flipBack"))}" aria-label="${m(t("cards.flipBack"))}">${it}</button>
