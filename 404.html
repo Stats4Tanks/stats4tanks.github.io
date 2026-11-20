@@ -28,13 +28,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261120230000">
-<link rel="stylesheet" href="cards.css?v=20261120230000">
-<link rel="stylesheet" href="rankmove.css?v=20261120230000">
-<link rel="icon" type="image/svg+xml" href="/art/favicon.svg?v=20261120230000">
-<link rel="apple-touch-icon" href="/art/icon-192.png?v=20261120230000">
+<link rel="stylesheet" href="styles.css?v=20261121010000">
+<link rel="stylesheet" href="cards.css?v=20261121010000">
+<link rel="stylesheet" href="rankmove.css?v=20261121010000">
+<link rel="icon" type="image/svg+xml" href="/art/favicon.svg?v=20261121010000">
+<link rel="apple-touch-icon" href="/art/icon-192.png?v=20261121010000">
 <!-- installable: the same plate, the same colours, no separate icon work -->
-<link rel="manifest" href="/manifest.webmanifest?v=20261120230000">
+<link rel="manifest" href="/manifest.webmanifest?v=20261121010000">
 </head>
 <body>
 <a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
@@ -50,7 +50,7 @@
           <path fill-rule="evenodd" d="M9.2 11.4V8.6c0-.75.6-1.35 1.35-1.35h2.9c.75 0 1.35.6 1.35 1.35v2.8H9.2Zm2.8-1.5a1.05 1.05 0 1 0 0 2.1 1.05 1.05 0 0 0 0-2.1Z"/>
           <path d="M14.4 8.15h8.38c.52 0 .94.42.94.94v.42c0 .52-.42.94-.94.94H14.4V8.15Z"/>
         </svg>
-        <img class="brand-tank-img" src="/art/brand-tank.png?v=20261120230000" width="395" height="282" alt="" draggable="false">
+        <img class="brand-tank-img" src="/art/brand-tank.png?v=20261121010000" width="395" height="282" alt="" draggable="false">
       </span>
       <span class="brand-lock" aria-hidden="true"><b>TierStats</b></span>
     </a>
@@ -390,7 +390,7 @@
     <section class="method-glance anim">
       <div class="mg-cell"><div class="k" data-i18n="method.glVisible">Visible rating</div><div class="v mono" data-i18n-html="method.glVisibleVal">Glicko − <span class="cons-val">0.5</span> × RD</div></div>
       <div class="mg-cell"><div class="k" data-i18n="method.glQualify">To qualify</div><div class="v" data-i18n-html="method.glQualifyVal"><span class="min-matches-val">5</span> matches · <span class="min-opp-val">3</span> opponents</div></div>
-      <div class="mg-cell"><div class="k" data-i18n="method.glPeriod">Rating period</div><div class="v mono"><span id="method-period-val">30</span> <span data-i18n="method.days">days</span></div></div>
+      <div class="mg-cell"><div class="k" data-i18n="method.glPeriod">RD growth interval</div><div class="v mono"><span id="method-period-val">30</span> <span data-i18n="method.days">days</span></div></div>
       <div class="mg-cell"><div class="k" data-i18n="method.glInactive">Inactive after</div><div class="v mono"><span id="method-inactive-val">365</span> <span data-i18n="method.days">days</span></div></div>
     </section>
 
@@ -400,8 +400,9 @@
         <article class="method-step"><span class="step-n mono">01</span><div><b>New players start at 1500 Glicko with 250 RD.</b>
           That is a fresh rating at maximum uncertainty. Players coming from the previous ladder start from a rating converted out of their old score, so their history carries over.</div></article>
         <article class="method-step"><span class="step-n mono">02</span><div data-i18n-html="method.step2"><b>Every match moves the numbers.</b>
-          Beat someone stronger and you gain more; lose to someone weaker and you
-          drop more. Results are processed in 30-day rating periods.</div></article>
+          Beat someone stronger and you gain more; lose to someone weaker and you drop more. Dated matches are processed
+          one at a time in chronological order, and both players move: the winner gains and the higher-rated player loses,
+          so an upset closes the gap.</div></article>
         <article class="method-step"><span class="step-n mono">03</span><div data-i18n-html="method.step3"><b>Your rating includes an uncertainty measure.</b>
           Each player has an <b>RD</b> (ratings deviation) that records how much data the rating is based on; more matches
           mean a lower RD. The leaderboard ranks <b>visible rating = Glicko − <span class="cons-val">0.5</span> × RD</b>,
@@ -430,20 +431,20 @@
         <b style="color:var(--ink)">visible rating</b> - Glicko minus <span class="cons-val">0.5</span> × RD - so a
         rating built on few results sits below its Glicko value.</p>
         <div class="method-rd">
-          <div class="method-rd-labels"><span data-i18n="method.rdNew">New · 250</span><span data-i18n="method.rdSettled">Settled · 50</span></div>
+          <div class="method-rd-labels"><span data-i18n="method.rdNew">New · 250</span><span data-i18n="method.rdSettled">Example established · ~50</span></div>
           <div class="method-rd-track" aria-hidden="true"><i></i><span></span></div>
           <div class="method-rd-note" data-i18n="method.rdNote">Lower RD means more trust.</div>
         </div>
       </section>
       <section class="panel method-concept mc-7">
         <h2 data-i18n="method.inactivity">How inactivity affects you</h2>
-        <p data-i18n-html="method.inactivityBody">Every full 30-day period without a match increases your RD, up to the
+        <p data-i18n-html="method.inactivityBody">Every full 30-day interval without a match increases your RD, up to the
         maximum of 250. Because the visible rating subtracts <span class="cons-val">0.5</span> × RD, an undefended
         rating falls gradually. After 365 days without a dated match, a qualified player is marked
         <b style="color:var(--ink)">inactive</b> and hidden from the board, but stays searchable and stays in the
         calculation.</p>
         <div class="method-decay">
-          <div class="md-step"><span class="n mono" id="method-decay-period">30d</span><span class="k" data-i18n="method.decayGrowth">RD grows after a silent period</span></div>
+          <div class="md-step"><span class="n mono" id="method-decay-period">30d</span><span class="k" data-i18n="method.decayGrowth">RD grows after a silent interval</span></div>
           <span class="md-arrow" aria-hidden="true">→</span>
           <div class="md-step"><span class="n mono" id="method-decay-inactive">365d</span><span class="k" data-i18n="method.decayHidden">Hidden after a long absence</span></div>
         </div>
@@ -459,6 +460,7 @@
         <div class="method-prov-copy">
           <p data-i18n-html="method.provLead">New players start at <b>1500 Glicko / 250 RD</b>. Until they have <b>3 rated matches against 2 different opponents</b>, an established opponent's rating change is scaled to <b>25%</b>. The newcomer's own rating still moves at <b>100%</b>.</p>
           <p data-i18n-html="method.provBoth">The scaling applies to wins and losses, so one result against an unproven player moves an established rating by at most a quarter of the normal amount.</p>
+          <p data-i18n-html="method.provNote">Newcomer protection ends at <b>3 matches against 2 opponents</b>. Qualification for the main leaderboard is a separate threshold: <b>5 matches against 3 different opponents</b>.</p>
         </div>
         <div class="method-prov-stats">
           <div class="method-prov-stat"><b class="mono">25%</b><span data-i18n="method.provEstablished">established opponent's change</span></div>
@@ -472,24 +474,31 @@
       <summary>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round"/></svg>
         <span data-i18n-html="method.advSummary">Advanced - the maths &amp; live settings</span>
-        <span class="adv-hint" data-i18n="method.advHint">formulas, rating periods, constants</span>
+        <span class="adv-hint" data-i18n="method.advHint">formulas, match order, settings</span>
       </summary>
       <div class="method-adv-body">
         <div class="method-adv-grid">
           <div class="panel">
-            <h3 data-i18n-html="method.updateTitle">Step 2 · <span class="n">The Glicko update</span></h3>
+            <h3 data-i18n="method.updateTitle">The Glicko update</h3>
             <p data-i18n-html="method.updateBody">With <b style="color:var(--ink)">q = ln(10)/400</b> and:</p>
             <div class="formula-box">g(RD) = 1 / √(1 + 3·q²·RD²/π²)<br>E(r, r<sub>o</sub>) = 1 / (1 + 10^(−g(RD<sub>o</sub>)·(r − r<sub>o</sub>)/400))<br>D² = 1 / (q²·Σ g²·E·(1−E))<br>r′ = r + (q/(1/RD² + q²·Σg²E(1−E)))·Σ g·(s − E)<br>RD′ = √(1 / (1/RD² + q²·Σg²E(1−E)))</div>
-            <p class="method-foot" data-i18n="method.updateNote">s is the match score (1 win, 0 loss, ½ draw). All games inside one rating period
-            are processed simultaneously from the same snapshot - exactly like the official sheet.</p>
+            <p class="method-foot" data-i18n="method.updateNote">s is the match score (1 win, 0 loss, ½ draw). Each dated match uses both players' rating and RD from immediately before that match.</p>
           </div>
           <div class="panel">
-            <h3 data-i18n-html="method.periodsTitle">Step 3 · <span class="n">Rating periods &amp; legacy matches</span></h3>
-            <p data-i18n-html="method.periodsBody">Dated matches are grouped into chronological <b style="color:var(--ink)">30-day rating periods</b>
-            and processed in order. Archive matches with no recorded date - <i>legacy</i> matches - are processed together as
-            one period at the start of the legacy grace window (2026-10-04). Inactivity growth follows
-            <span class="mono">RD′ = √(RD² + 20²·k)</span> for k periods without a match, capped at 250.</p>
-            <div class="formula-box" data-i18n-html="method.formulaPeriods">period = ⌊date / 30 days⌋ &nbsp;·&nbsp; legacy = one simultaneous batch</div>
+            <h3 data-i18n="method.matchOrderTitle">Match order &amp; inactivity</h3>
+            <p data-i18n-html="method.matchOrderBody">Dated matches are calculated one at a time, in date order, from both players' rating and RD immediately before that match. Archive matches with no recorded date - <i>legacy</i> matches - are the exception: their order is unknown, so they are processed together as one batch at the start of the legacy grace window (2026-10-04). The 30-day interval applies only to inactivity: RD grows by <span class="mono">RD′ = √(RD² + 20²·k)</span> for k silent intervals, capped at 250.</p>
+            <div class="formula-box" data-i18n-html="method.formulaPeriods">dated = one match at a time &nbsp;·&nbsp; legacy = one simultaneous batch</div>
+          </div>
+          <div class="panel">
+            <h3 data-i18n="method.liveTitle">Live settings</h3>
+            <ul class="explain-list">
+              <li><div data-i18n-html="method.setStart"><b>Starting point</b> - 1500 Glicko, 250 RD</div></li>
+              <li><div data-i18n-html="method.setInterval"><b>RD growth interval</b> - every 30 days without a match, capped at 250 RD</div></li>
+              <li><div data-i18n-html="method.setInactive"><b>Inactive after</b> - 365 days without a dated match</div></li>
+              <li><div data-i18n-html="method.setProv"><b>Newcomer protection ends</b> - 3 matches against 2 opponents</div></li>
+              <li><div data-i18n-html="method.setQualify"><b>Leaderboard qualification</b> - 5 matches against 3 opponents</div></li>
+              <li><div data-i18n-html="method.setGrace"><b>Legacy grace start</b> - 2026-10-04</div></li>
+            </ul>
           </div>
         </div>
       </div>
@@ -838,7 +847,7 @@
 <button class="to-top" id="to-top" aria-label="Back to top" title="Back to top" data-i18n-attr="aria-label:misc.toTop;title:misc.toTop">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M6 12.5l6-6 6 6M6 18.5l6-6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
-<script src="i18n.js?v=20261120230000"></script>
+<script src="i18n.js?v=20261121010000"></script>
 <script>
   /* data.js is rewritten by the sheet sync worker outside of site deploys -
      load it with a per-request cache-buster so every refresh shows the
@@ -847,12 +856,12 @@
   document.write('<script src="data.js?t=' + Date.now() + '\"><\/script>');
 </script>
 <script src="log.js?v=1794225931899"></script>
-<script src="tanks.js?v=20261120230000"></script>
-<script src="tankrender.js?v=20261120230000"></script>
-<script src="cards.js?v=20261120230000"></script>
-<script src="tourneys.js?v=20261120230000"></script>
-<script src="app.js?v=20261120230000"></script>
-<script src="rankmove.js?v=20261120230000"></script>
+<script src="tanks.js?v=20261121010000"></script>
+<script src="tankrender.js?v=20261121010000"></script>
+<script src="cards.js?v=20261121010000"></script>
+<script src="tourneys.js?v=20261121010000"></script>
+<script src="app.js?v=20261121010000"></script>
+<script src="rankmove.js?v=20261121010000"></script>
 <script>
 /* Offline board + fast repeat visits.
    The version number is this page's own asset stamp, so every publish is a new
